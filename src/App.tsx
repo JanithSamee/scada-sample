@@ -11,84 +11,91 @@ function App() {
 		...shapes,
 	};
 
-	useEffect(() => {
-		const graph = new dia.Graph({}, { cellNamespace: namespace });
+useEffect(() => {
+	const graph = new dia.Graph({}, { cellNamespace: namespace });
 
-		const paper = new dia.Paper({
-			model: graph,
-			background: { color: "#F5F5F5" },
-			height: "100vh",
-			width: "100vw",
-			cellViewNamespace: namespace,
-		});
+	const paper = new dia.Paper({
+		model: graph,
+		background: { color: "#F5F5F5" },
+		height: "100vh",
+		width: "100vw",
+		cellViewNamespace: namespace,
+	});
 
-		scadaView.current?.appendChild(paper.el);
+	scadaView.current?.appendChild(paper.el);
 
-		// ----- Components -----
-		const valve = new Valve();
-		valve.addTo(graph);
-		valve.position(400, 100);
-		valve.attr("label/text", "Hand Valve");
+	// ----- Components -----
+	const valve = new Valve({ open: false }); // default closed
+	valve.addTo(graph);
+	valve.position(400, 100);
+	valve.attr("label/text", "Hand Valve");
 
-		const oilTank01 = new OilTank({ attrs: { label: { text: "Tank 1" } } });
-		oilTank01.addTo(graph);
-		oilTank01.position(100, 100);
+	const oilTank01 = new OilTank({ attrs: { label: { text: "Tank 1" } } });
+	oilTank01.addTo(graph);
+	oilTank01.position(100, 100);
 
-		const oilTank02 = new OilTank({ attrs: { label: { text: "Tank 2" } } });
-		oilTank02.addTo(graph);
-		oilTank02.position(600, 100);
+	const oilTank02 = new OilTank({ attrs: { label: { text: "Tank 2" } } });
+	oilTank02.addTo(graph);
+	oilTank02.position(600, 100);
 
-		// ----- valve Control -----
+	// ----- Pump Links -----
+	const t1Tvalve = new PipeLink();
+	t1Tvalve.source(oilTank01, { port: "right" });
+	t1Tvalve.target(valve, { port: "left" });
+	t1Tvalve.runFlow();
+	t1Tvalve.addTo(graph);
 
-		valve.on("onButtonClick", () => {
-			console.log("first");
-			if (valve.get("open")) {
-				t1Tvalve.stopFlow();
+	const valveTt2 = new PipeLink();
+	valveTt2.source(valve, { port: "right" });
+	valveTt2.target(oilTank02, { port: "left" });
+	valveTt2.addTo(graph);
+
+	// ----- Valve Control -----
+	valve.on("onButtonClick", () => {
+		const isOpen = valve.get("open");
+		valve.set("open", !isOpen); // toggle state
+	});
+
+	// Listen to valve open/close changes
+	valve.on("change:open", (_model, isOpen: boolean) => {
+		console.log("Valve state changed:", isOpen ? "OPEN" : "CLOSED");
+
+		if (isOpen) {
+			t1Tvalve.runFlow();
+			valveTt2.runFlow();
+		} else {
+			t1Tvalve.stopFlow();
+			valveTt2.stopFlow();
+		}
+	});
+
+	// ----- UI Controls -----
+	function addControls(paper: dia.Paper) {
+		const graph = paper.model;
+		graph.getElements().forEach((cell: any) => {
+			switch (cell.get("type")) {
+				case "HandValve":
+					ToggleValveControl.add(
+						cell.findView(paper),
+						"root",
+						"button"
+					);
+					break;
 			}
 		});
+	}
+	function removeControls(paper: dia.Paper) {
+		ToggleValveControl.removeAll(paper);
+	}
+	addControls(paper);
 
-		// ----- Pump Links  -----
-		const t1Tvalve = new PipeLink();
+	return () => {
+		graph.clear();
+		paper.remove();
+		removeControls(paper);
+	};
+}, []);
 
-		t1Tvalve.source(oilTank01, { port: "right" });
-		t1Tvalve.target(valve, { port: "left" });
-		t1Tvalve.runFlow();
-		t1Tvalve.addTo(graph);
-
-		const valveTt2 = new PipeLink();
-
-		valveTt2.source(valve, { port: "right" });
-		valveTt2.target(oilTank02, { port: "left" });
-		valveTt2.runFlow();
-		valveTt2.stopFlow();
-		valveTt2.addTo(graph);
-
-		function addControls(paper: dia.Paper) {
-			const graph = paper.model;
-			graph.getElements().forEach((cell: any) => {
-				switch (cell.get("type")) {
-					case "HandValve":
-						ToggleValveControl.add(
-							cell.findView(paper),
-							"root",
-							"button"
-						);
-						break;
-				}
-			});
-		}
-		function removeControls(paper: dia.Paper) {
-			ToggleValveControl.removeAll(paper);
-			// PumpControl.removeAll(paper);
-		}
-		addControls(paper);
-
-		return () => {
-			graph.clear();
-			paper.remove();
-			removeControls(paper);
-		};
-	}, []);
 
 	return (
 		<div>
